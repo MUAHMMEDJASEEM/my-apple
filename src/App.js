@@ -1,29 +1,24 @@
 import React, { useState } from 'react';
 import './App.css';
-
 const KeystrokeAuthApp = () => {
     const [registrationVectors, setRegistrationVectors] = useState([]);
-    const [averageVector, setAverageVector] = useState(null);
+    const [medianVector, setMedianVector] = useState(null);
     const [keystrokeTimes, setKeystrokeTimes] = useState([]);
     const [lastTime, setLastTime] = useState(null);
     const [authResult, setAuthResult] = useState(null);
     const [authInput, setAuthInput] = useState('');
     const [vectorLengthVariation, setVectorLengthVariation] = useState(null);
-    const [stdDevs, setStdDevs] = useState([]); // Store standard deviations
-    const [currentInterval, setCurrentInterval] = useState(null); // Track current interval
-    const [authAttempts, setAuthAttempts] = useState([]); // Store keystroke times for each auth attempt
+    const [stdDevs, setStdDevs] = useState([]);
+    const [authAttempts, setAuthAttempts] = useState([]);
+
     const targetText = "toothbrush apple";
 
     const handleKeyPress = (e, isAuth = false) => {
         const currentTime = Date.now();
         if (lastTime) {
             const timeDiff = currentTime - lastTime;
-            if (!isAuth && keystrokeTimes.length < targetText.length - 1) {
+            if (keystrokeTimes.length < targetText.length - 1) {
                 setKeystrokeTimes([...keystrokeTimes, timeDiff]);
-            }
-            if (isAuth && keystrokeTimes.length < targetText.length - 1) {
-                setKeystrokeTimes([...keystrokeTimes, timeDiff]);
-                setCurrentInterval(keystrokeTimes.length + 1); // Update the current interval
             }
         }
         setLastTime(currentTime);
@@ -52,16 +47,11 @@ const KeystrokeAuthApp = () => {
         }
 
         if (registrationVectors.length === 4) {
-            const sumVector = registrationVectors.reduce((sum, vector) => {
-                return sum.map((value, i) => value + vector[i]);
-            }, new Array(targetText.length - 1).fill(0));
+            const medianVector = calculateMedianVector(registrationVectors);
+            setMedianVector(medianVector);
 
-            const avgVector = sumVector.map((value) => value / 5);
-            setAverageVector(avgVector);
-
-            // Calculate standard deviations
             const calculatedStdDevs = calculateStandardDeviation(registrationVectors);
-            setStdDevs(calculatedStdDevs);
+            setStdDevs(calculatedStdDevs.map(() => 30));  // Assuming a fixed deviation, change this as needed
         }
     };
 
@@ -84,17 +74,22 @@ const KeystrokeAuthApp = () => {
         }
 
         if (keystrokeTimes.length === targetText.length - 1) {
-            // Track the keystroke times for each authentication attempt
             setAuthAttempts([...authAttempts, keystrokeTimes]);
 
-            // If 3 attempts have been made, calculate average keystroke time vector
-            if (authAttempts.length + 1 === 3) {
-                const avgAuthVector = calculateAverageVector(authAttempts);
-                const similarity = cosineSimilarity(averageVector, avgAuthVector);
-                const lengthVariation = calculateLengthVariation(averageVector, avgAuthVector);
-                setAuthResult(similarity);
+            if (authAttempts.length + 1 === 1) {
+                const medianAuthVector = calculateMedianVector([...authAttempts, keystrokeTimes]);
+                const similarity = cosineSimilarity(medianVector, medianAuthVector);
+                const lengthVariation = calculateLengthVariation(medianVector, medianAuthVector);
+                const intervalsWithinRange = calculateIntervalsWithinRange(medianAuthVector);
+                const yScores = calculateYScores(medianAuthVector);
+
+                const finalScore = calculateFinalScore(similarity, lengthVariation, intervalsWithinRange);
+                const yScoreSum = yScores.reduce((sum, score) => sum + score, 0);
+
+                setAuthResult({ finalScore, yScores, yScoreSum });
+
                 setVectorLengthVariation(lengthVariation);
-                setAuthAttempts([]); // Clear attempts after 3rd submission
+                setAuthAttempts([]);
             }
 
             setKeystrokeTimes([]);
@@ -102,17 +97,25 @@ const KeystrokeAuthApp = () => {
         }
     };
 
-    const calculateAverageVector = (attempts) => {
-        const vectorLength = attempts[0].length;
-        const avgVector = new Array(vectorLength).fill(0);
+    // New function to calculate the median of each interval
+    const calculateMedianVector = (vectors) => {
+        const vectorLength = vectors[0].length;
+        const medianVector = new Array(vectorLength);
 
-        attempts.forEach(attempt => {
-            attempt.forEach((time, index) => {
-                avgVector[index] += time;
-            });
-        });
+        for (let i = 0; i < vectorLength; i++) {
+            const intervalValues = vectors.map(vector => vector[i]);
+            intervalValues.sort((a, b) => a - b);
 
-        return avgVector.map(time => time / attempts.length); // Calculate average for each interval
+            const middle = Math.floor(intervalValues.length / 2);
+            if (intervalValues.length % 2 === 0) {
+                // Average of two middle values
+                medianVector[i] = (intervalValues[middle - 1] + intervalValues[middle]) / 2;
+            } else {
+                medianVector[i] = intervalValues[middle];
+            }
+        }
+
+        return medianVector;
     };
 
     const calculateLengthVariation = (vecA, vecB) => {
@@ -139,18 +142,33 @@ const KeystrokeAuthApp = () => {
         return dotProduct / (magnitudeA * magnitudeB);
     };
 
-    // Calculate the number of intervals within standard deviation range
-    const calculateIntervalsWithinRange = (currentInterval) => {
+    const calculateIntervalsWithinRange = (authVector) => {
         const stdDevRangeCount = stdDevs.reduce((count, stdDev, index) => {
-            const lowerBound = averageVector[index] - stdDev;
-            const upperBound = averageVector[index] + stdDev;
-            const currentIntervalValue = keystrokeTimes[index] || 0; // Ensure the value exists
-            if (currentIntervalValue >= lowerBound && currentIntervalValue <= upperBound) {
+            const lowerBound = medianVector[index] - stdDev;
+            const upperBound = medianVector[index] + stdDev;
+            const currentValue = authVector[index] || 0;
+            if (currentValue >= lowerBound && currentValue <= upperBound) {
                 count++;
             }
             return count;
         }, 0);
-        return stdDevRangeCount;
+        return stdDevRangeCount / stdDevs.length;
+    };
+
+    const calculateYScores = (authVector) => {
+        return authVector.map((value, index) => {
+            const stdDev = stdDevs[index];
+            const median = medianVector[index];
+            const difference = Math.abs(value - median);
+            return difference <= stdDev ? 1 : stdDev / difference;
+        });
+    };
+
+    const calculateFinalScore = (similarity, lengthVariation, intervalsWithinRange) => {
+        const similarityScore = similarity;
+        const lengthVariationScore = 1 - lengthVariation / 100;
+        const intervalScore = intervalsWithinRange;
+        return (similarityScore + lengthVariationScore + intervalScore) / 3;
     };
 
     return (
@@ -174,33 +192,32 @@ const KeystrokeAuthApp = () => {
                         e.target.value = handleRegistrationChange(e.target.value);
                         if (e.target.value === targetText) {
                             handleRegistrationSubmit(e.target.value);
-                            e.target.value = ""; // Clear input after correct typing
+                            e.target.value = "";
                         }
                     }}
                 />
                 <p>Registered Samples: {registrationVectors.length} / 5</p>
 
-                {averageVector && (
+                {medianVector && (
                     <div className="average-vector-section">
-                        <h3>Average Vector</h3>
+                        <h3>Median Vector</h3>
                         <table className="vector-table">
                             <thead>
                                 <tr>
-                                    {averageVector.map((_, index) => (
+                                    {medianVector.map((_, index) => (
                                         <th key={index}>Interval {index + 1}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    {averageVector.map((value, index) => (
+                                    {medianVector.map((value, index) => (
                                         <td key={index}>{value.toFixed(2)}</td>
                                     ))}
                                 </tr>
                             </tbody>
                         </table>
 
-                        {/* Show the standard deviation ranges */}
                         <h3>Standard Deviation Ranges</h3>
                         <table className="vector-table">
                             <thead>
@@ -212,15 +229,9 @@ const KeystrokeAuthApp = () => {
                             </thead>
                             <tbody>
                                 <tr>
-                                    {stdDevs.map((stdDev, index) => {
-                                        const lowerBound = (averageVector[index] - stdDev).toFixed(2);
-                                        const upperBound = (averageVector[index] + stdDev).toFixed(2);
-                                        return (
-                                            <td key={index}>
-                                                {lowerBound} - {upperBound}
-                                            </td>
-                                        );
-                                    })}
+                                    {stdDevs.map((stdDev, index) => (
+                                        <td key={index}>{stdDev.toFixed(2)}</td>
+                                    ))}
                                 </tr>
                             </tbody>
                         </table>
@@ -228,31 +239,56 @@ const KeystrokeAuthApp = () => {
                 )}
             </div>
 
-            {averageVector && (
-                <div className="auth-section">
-                    <h2>Step 2: Authentication</h2>
-                    <p>Type the text: "{targetText}"</p>
-                    <input
-                        className="text-input"
-                        type="text"
-                        value={authInput}
-                        onKeyPress={(e) => handleKeyPress(e, true)}
-                        onChange={(e) => {
-                            handleAuthChange(e.target.value);
-                            if (e.target.value === targetText) {
-                                handleAuthSubmit(e.target.value);
-                                setAuthInput(''); // Clear input after correct typing
-                            }
-                        }}
-                    />
-                    {authResult && (
-                        <div className="auth-results">
-                            <p>Cosine Similarity: {authResult.toFixed(2)}</p>
-                            <p>Vector Length Variation: {vectorLengthVariation}%</p>
-                        </div>
-                    )}
-                </div>
-            )}
+            <div className="authentication-section">
+                <h2>Step 2: Authentication</h2>
+                <p>Type the text: "{targetText}" (3 attempts)</p>
+                <input
+                    className="text-input"
+                    type="text"
+                    value={authInput}
+                    onKeyPress={(e) => handleKeyPress(e, true)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            setKeystrokeTimes([]);
+                            setLastTime(null);
+                        }
+                    }}
+                    onChange={(e) => {
+                        handleAuthChange(e.target.value);
+                        if (e.target.value === targetText) {
+                            handleAuthSubmit(e.target.value);
+                            setAuthInput('');
+                        }
+                    }}
+                />
+                <p>Authentication Attempts: {authAttempts.length} / 3</p>
+
+                {authResult !== null && (
+                    <div className="auth-result-section">
+                        <h3>Authentication Result</h3>
+                        <p>Final Score: {authResult.finalScore.toFixed(2)}</p>
+                        <p>Sum of Y-Scores: {authResult.yScoreSum.toFixed(2)}</p>
+                        <p>Vector Length Variation: {vectorLengthVariation}%</p>
+                        <h3>Y-Scores</h3>
+                        <table className="vector-table">
+                            <thead>
+                                <tr>
+                                    {authResult.yScores.map((_, index) => (
+                                        <th key={index}>Interval {index + 1}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    {authResult.yScores.map((yScore, index) => (
+                                        <td key={index}>{yScore.toFixed(2)}</td>
+                                    ))}
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
