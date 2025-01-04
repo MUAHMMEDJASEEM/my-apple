@@ -1,0 +1,83 @@
+/* App.css */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f4f4f9;
+  color: #333;
+}
+
+.app-container {
+  max-width: 800px;
+  margin: 50px auto;
+  padding: 20px;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.app-title {
+  font-size: 2rem;
+  margin-bottom: 20px;
+  color: #4a90e2;
+}
+
+.registration-section, .auth-section {
+  margin-top: 30px;
+}
+
+.text-input {
+  width: 80%;
+  padding: 10px;
+  font-size: 1rem;
+  border: 2px solid #ddd;
+  border-radius: 5px;
+  margin: 10px 0;
+}
+
+.text-input:focus {
+  border-color: #4a90e2;
+  outline: none;
+  box-shadow: 0 0 5px rgba(74, 144, 226, 0.5);
+}
+
+.average-vector-section {
+  margin-top: 20px;
+}
+
+.vector-table {
+  margin: 0 auto;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.vector-table th, .vector-table td {
+  border: 1px solid #ddd;
+  padding: 10px;
+  text-align: center;
+}
+
+.vector-table th {
+  background-color: #4a90e2;
+  color: #fff;
+}
+
+.vector-table-container {
+  overflow-x: auto;
+  margin-top: 20px;
+}
+
+.vector-table {
+  margin: 0 auto;
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+}
+
+
+.auth-results p {
+  font-size: 1.2rem;
+  margin: 10px 0;
+  color: #4a90e2;
+}
