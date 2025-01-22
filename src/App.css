@@ -1,83 +1,110 @@
-/* App.css */
+/* General layout */
 body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
   background-color: #f4f4f9;
   color: #333;
+  line-height: 1.6;
 }
 
 .app-container {
-  max-width: 800px;
-  margin: 50px auto;
+  max-width: 600px;
+  margin: 30px auto;
   padding: 20px;
   background: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  text-align: center;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.app-title {
-  font-size: 2rem;
+/* Headings */
+h1, h2 {
+  color: #2c3e50;
+}
+
+h1 {
+  font-size: 24px;
+  text-align: center;
   margin-bottom: 20px;
-  color: #4a90e2;
 }
 
-.registration-section, .auth-section {
-  margin-top: 30px;
-}
-
-.text-input {
-  width: 80%;
-  padding: 10px;
-  font-size: 1rem;
-  border: 2px solid #ddd;
-  border-radius: 5px;
-  margin: 10px 0;
-}
-
-.text-input:focus {
-  border-color: #4a90e2;
-  outline: none;
-  box-shadow: 0 0 5px rgba(74, 144, 226, 0.5);
-}
-
-.average-vector-section {
+h2 {
+  font-size: 18px;
   margin-top: 20px;
+  border-bottom: 2px solid #ddd;
+  padding-bottom: 5px;
 }
 
-.vector-table {
-  margin: 0 auto;
-  border-collapse: collapse;
+/* Input styling */
+input[type="text"] {
   width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+  box-sizing: border-box;
 }
 
-.vector-table th, .vector-table td {
-  border: 1px solid #ddd;
+input[type="text"]:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+}
+
+/* Messages and scores */
+p {
+  margin: 5px 0;
+}
+
+p span {
+  font-weight: bold;
+}
+
+div {
+  margin-top: 15px;
+}
+
+.final-score {
+  margin-top: 10px;
   padding: 10px;
+  background-color: #ecf9f1;
+  border-left: 5px solid #2ecc71;
+  font-weight: bold;
+  color: #27ae60;
+}
+
+.error-message {
+  color: #e74c3c;
+  font-weight: bold;
+}
+/* Table Styling */
+.vector-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+  margin-bottom: 20px;
+  font-size: 14px;
   text-align: center;
+}
+
+.vector-table th,
+.vector-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
 }
 
 .vector-table th {
-  background-color: #4a90e2;
-  color: #fff;
+  background-color: #f4f4f9;
+  color: #333;
+  font-weight: bold;
 }
 
-.vector-table-container {
-  overflow-x: auto;
-  margin-top: 20px;
+.vector-table tr:nth-child(even) {
+  background-color: #f9f9f9;
 }
 
-.vector-table {
-  margin: 0 auto;
-  border-collapse: collapse;
-  width: max-content;
-  min-width: 100%;
-}
-
-
-.auth-results p {
-  font-size: 1.2rem;
-  margin: 10px 0;
-  color: #4a90e2;
+.vector-table tr:hover {
+  background-color: #f1f1f1;
 }

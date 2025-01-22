@@ -1,19 +1,24 @@
 import React, { useState } from 'react';
 import './App.css';
+
 const KeystrokeAuthApp = () => {
     const [registrationVectors, setRegistrationVectors] = useState([]);
+    const [holdTimes, setHoldTimes] = useState([]);
     const [medianVector, setMedianVector] = useState(null);
+    const [medianHoldVector, setMedianHoldVector] = useState(null);
     const [keystrokeTimes, setKeystrokeTimes] = useState([]);
     const [lastTime, setLastTime] = useState(null);
-    const [authResult, setAuthResult] = useState(null);
+    const [authResult, setAuthResult] = useState({
+        finalScore: 0,
+        yScores: [],
+        yScoreSum: 0,
+        manhattanDistance: 0,
+    });
     const [authInput, setAuthInput] = useState('');
-    const [vectorLengthVariation, setVectorLengthVariation] = useState(null);
-    const [stdDevs, setStdDevs] = useState([]);
     const [authAttempts, setAuthAttempts] = useState([]);
-
     const targetText = "toothbrush apple";
 
-    const handleKeyPress = (e, isAuth = false) => {
+    const handleKeyPress = (e) => {
         const currentTime = Date.now();
         if (lastTime) {
             const timeDiff = currentTime - lastTime;
@@ -24,10 +29,25 @@ const KeystrokeAuthApp = () => {
         setLastTime(currentTime);
     };
 
+    const handleKeyDown = (e) => {
+        if (e.key.length === 1 && holdTimes.length < targetText.length) {
+            const startTime = Date.now();
+            setHoldTimes([...holdTimes, { key: e.key, startTime }]);
+        }
+    };
+
+    const handleKeyUp = (e) => {
+        const endTime = Date.now();
+        setHoldTimes((prev) =>
+            prev.map((entry) =>
+                entry.key === e.key && !entry.endTime ? { ...entry, endTime } : entry
+            )
+        );
+    };
+
     const handleRegistrationChange = (value) => {
         if (!targetText.startsWith(value)) {
-            setKeystrokeTimes([]);
-            setLastTime(null);
+            resetInputState();
             return "";
         }
         return value;
@@ -35,31 +55,34 @@ const KeystrokeAuthApp = () => {
 
     const handleRegistrationSubmit = (value) => {
         if (value !== targetText) {
-            setKeystrokeTimes([]);
-            setLastTime(null);
+            resetInputState();
             return;
         }
 
-        if (keystrokeTimes.length === targetText.length - 1) {
-            setRegistrationVectors([...registrationVectors, keystrokeTimes]);
-            setKeystrokeTimes([]);
-            setLastTime(null);
+        const validHoldTimes = holdTimes.map(({ startTime, endTime }) => {
+            if (startTime && endTime) {
+                return endTime - startTime;
+            }
+            return 0;
+        });
+
+        if (keystrokeTimes.length === targetText.length - 1 && validHoldTimes.length === targetText.length) {
+            setRegistrationVectors([...registrationVectors, { intervals: keystrokeTimes, holds: validHoldTimes }]);
+            resetInputState();
         }
 
         if (registrationVectors.length === 4) {
-            const medianVector = calculateMedianVector(registrationVectors);
+            const medianVector = calculateMedianVector(registrationVectors.map((v) => v.intervals));
+            const medianHoldVector = calculateMedianVector(registrationVectors.map((v) => v.holds));
             setMedianVector(medianVector);
-
-            const calculatedStdDevs = calculateStandardDeviation(registrationVectors);
-            setStdDevs(calculatedStdDevs.map(() => 30));  // Assuming a fixed deviation, change this as needed
+            setMedianHoldVector(medianHoldVector);
         }
     };
 
     const handleAuthChange = (value) => {
         if (!targetText.startsWith(value)) {
             setAuthInput('');
-            setKeystrokeTimes([]);
-            setLastTime(null);
+            resetInputState();
             return;
         }
         setAuthInput(value);
@@ -67,127 +90,174 @@ const KeystrokeAuthApp = () => {
 
     const handleAuthSubmit = (value) => {
         if (value !== targetText) {
-            setAuthInput('');
-            setKeystrokeTimes([]);
-            setLastTime(null);
+            resetInputState();
             return;
         }
 
-        if (keystrokeTimes.length === targetText.length - 1) {
-            setAuthAttempts([...authAttempts, keystrokeTimes]);
+        const validHoldTimes = holdTimes.map(({ startTime, endTime }) => {
+            if (startTime && endTime) {
+                return endTime - startTime;
+            }
+            return 0;
+        });
 
-            if (authAttempts.length + 1 === 1) {
-                const medianAuthVector = calculateMedianVector([...authAttempts, keystrokeTimes]);
-                const similarity = cosineSimilarity(medianVector, medianAuthVector);
-                const lengthVariation = calculateLengthVariation(medianVector, medianAuthVector);
-                const intervalsWithinRange = calculateIntervalsWithinRange(medianAuthVector);
-                const yScores = calculateYScores(medianAuthVector);
+        if (keystrokeTimes.length === targetText.length - 1 && validHoldTimes.length === targetText.length) {
+            setAuthAttempts([...authAttempts, { intervals: keystrokeTimes, holds: validHoldTimes }]);
 
-                const finalScore = calculateFinalScore(similarity, lengthVariation, intervalsWithinRange);
+            if (medianVector && medianHoldVector) {
+                const scalingFactors = calculateScalingFactors(medianVector, medianHoldVector);
+
+                const yScores = calculateYScores(medianVector, medianHoldVector, keystrokeTimes, validHoldTimes, scalingFactors);
                 const yScoreSum = yScores.reduce((sum, score) => sum + score, 0);
+                const finalScore = yScoreSum / yScores.length;
 
-                setAuthResult({ finalScore, yScores, yScoreSum });
+                const manhattanDistance = calculateManhattanDistance(registrationVectors, medianVector, medianHoldVector, keystrokeTimes, validHoldTimes, scalingFactors);
+                const scaledManhattanDistance = manhattanDistance / (keystrokeTimes.length + validHoldTimes.length);
 
-                setVectorLengthVariation(lengthVariation);
-                setAuthAttempts([]);
+                setAuthResult({
+                    finalScore,
+                    yScores,
+                    yScoreSum,
+                    manhattanDistance: scaledManhattanDistance,
+                });
+            } else {
+                // If median vectors are not available, handle the error gracefully
+                console.error("Median vectors are not available for authentication.");
+                setAuthResult({
+                    finalScore: 0,
+                    yScores: [],
+                    yScoreSum: 0,
+                    manhattanDistance: 0,
+                });
             }
 
-            setKeystrokeTimes([]);
-            setLastTime(null);
+            resetInputState();
+        } else {
+            // Handle incomplete data, like missing keystrokeTimes or validHoldTimes
+            console.error("Keystroke times or hold times are incomplete for authentication.");
+            setAuthResult({
+                finalScore: 0,
+                yScores: [],
+                yScoreSum: 0,
+                manhattanDistance: 0,
+            });
         }
     };
 
-    // New function to calculate the median of each interval
     const calculateMedianVector = (vectors) => {
+        if (vectors.length === 0) return null;
+
         const vectorLength = vectors[0].length;
         const medianVector = new Array(vectorLength);
 
         for (let i = 0; i < vectorLength; i++) {
-            const intervalValues = vectors.map(vector => vector[i]);
-            intervalValues.sort((a, b) => a - b);
+            const values = vectors.map((vector) => vector[i]);
+            values.sort((a, b) => a - b);
 
-            const middle = Math.floor(intervalValues.length / 2);
-            if (intervalValues.length % 2 === 0) {
-                // Average of two middle values
-                medianVector[i] = (intervalValues[middle - 1] + intervalValues[middle]) / 2;
-            } else {
-                medianVector[i] = intervalValues[middle];
-            }
+            const middle = Math.floor(values.length / 2);
+            medianVector[i] = values.length % 2 === 0
+                ? (values[middle - 1] + values[middle]) / 2
+                : values[middle];
         }
 
         return medianVector;
     };
 
-    const calculateLengthVariation = (vecA, vecB) => {
-        const lengthA = vecA.reduce((sum, val) => sum + val, 0);
-        const lengthB = vecB.reduce((sum, val) => sum + val, 0);
-        return ((Math.abs(lengthA - lengthB) / lengthA) * 100).toFixed(2);
+    const calculateScalingFactors = (medianIntervals, medianHolds) => {
+        const intervalScalingFactors = medianIntervals.map(
+            (value) => (value !== 0 ? 1 / value : 1) // Avoid division by zero
+        );
+        const holdScalingFactors = medianHolds.map(
+            (value) => (value !== 0 ? 1 / value : 1) // Avoid division by zero
+        );
+        return { intervalScalingFactors, holdScalingFactors };
     };
 
-    const calculateStandardDeviation = (vectors) => {
-        const stdDevs = vectors[0].map((_, index) => {
-            const valuesAtIndex = vectors.map((vector) => vector[index]);
-            const mean = valuesAtIndex.reduce((sum, val) => sum + val, 0) / valuesAtIndex.length;
-            const variance = valuesAtIndex.reduce((sum, val) => sum + (val - mean) ** 2, 0) / valuesAtIndex.length;
-            return Math.sqrt(variance);
-        });
-        return stdDevs;
-    };
+    const calculateYScores = (medianIntervals, medianHolds, authIntervals, authHolds, scalingFactors) => {
+        const { intervalScalingFactors, holdScalingFactors } = scalingFactors;
 
-    const cosineSimilarity = (vecA, vecB) => {
-        const dotProduct = vecA.reduce((sum, val, i) => sum + val * vecB[i], 0);
-        const magnitudeA = Math.sqrt(vecA.reduce((sum, val) => sum + val ** 2, 0));
-        const magnitudeB = Math.sqrt(vecB.reduce((sum, val) => sum + val ** 2, 0));
+        const scaledIntervals = authIntervals.map((value, index) => value * intervalScalingFactors[index]);
+        const scaledHolds = authHolds.map((value, index) => value * holdScalingFactors[index]);
 
-        return dotProduct / (magnitudeA * magnitudeB);
-    };
+        const scaledMedians = [
+            ...medianIntervals.map((value, index) => value * intervalScalingFactors[index]),
+            ...medianHolds.map((value, index) => value * holdScalingFactors[index]),
+        ];
 
-    const calculateIntervalsWithinRange = (authVector) => {
-        const stdDevRangeCount = stdDevs.reduce((count, stdDev, index) => {
-            const lowerBound = medianVector[index] - stdDev;
-            const upperBound = medianVector[index] + stdDev;
-            const currentValue = authVector[index] || 0;
-            if (currentValue >= lowerBound && currentValue <= upperBound) {
-                count++;
+        const scaledAuth = [...scaledIntervals, ...scaledHolds];
+
+        return scaledAuth.map((value, index) => {
+            const median = scaledMedians[index];
+            const rangeLimits = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30];
+            const percentageDiff = Math.abs(value - median) / median;
+
+            for (let i = 0; i < rangeLimits.length; i++) {
+                if (percentageDiff <= rangeLimits[i]) {
+                    return 10 - i;
+                }
             }
-            return count;
-        }, 0);
-        return stdDevRangeCount / stdDevs.length;
-    };
-
-    const calculateYScores = (authVector) => {
-        return authVector.map((value, index) => {
-            const stdDev = stdDevs[index];
-            const median = medianVector[index];
-            const difference = Math.abs(value - median);
-            return difference <= stdDev ? 1 : stdDev / difference;
+            return 0;
         });
     };
 
-    const calculateFinalScore = (similarity, lengthVariation, intervalsWithinRange) => {
-        const similarityScore = similarity;
-        const lengthVariationScore = 1 - lengthVariation / 100;
-        const intervalScore = intervalsWithinRange;
-        return (similarityScore + lengthVariationScore + intervalScore) / 3;
+    const calculateManhattanDistance = (registrationVectors, medianIntervals, medianHolds, authIntervals, authHolds, scalingFactors) => {
+        const { intervalScalingFactors, holdScalingFactors } = scalingFactors;
+    
+        // Calculate the max registration vector for each element
+        const maxRegistrationIntervals = [];
+        const maxRegistrationHolds = [];
+    
+        for (let i = 0; i < registrationVectors[0].length; i++) {
+            const intervalValues = registrationVectors.map(v => v.intervals[i]);
+            const holdValues = registrationVectors.map(v => v.holds[i]);
+    
+            maxRegistrationIntervals.push(Math.max(...intervalValues));
+            maxRegistrationHolds.push(Math.max(...holdValues));
+        }
+    
+        const scaledIntervals = authIntervals.map((value, index) => value * intervalScalingFactors[index]);
+        const scaledHolds = authHolds.map((value, index) => value * holdScalingFactors[index]);
+    
+        const scaledMedians = [
+            ...medianIntervals.map((value, index) => value * intervalScalingFactors[index]),
+            ...medianHolds.map((value, index) => value * holdScalingFactors[index]),
+        ];
+    
+        const scaledAuth = [...scaledIntervals, ...scaledHolds];
+        const scaledMaxRegistration = [
+            ...maxRegistrationIntervals,
+            ...maxRegistrationHolds,
+        ];
+    
+        // Calculate the Manhattan Distance using the max registration values for normalization
+        const manhattanDistance = scaledMedians.reduce((sum, value, index) => {
+            const maxVal = scaledMaxRegistration[index] || 1;  // Prevent division by zero
+            const diff = Math.abs(value - scaledAuth[index]);
+            return sum + diff / maxVal;  // Normalize by the max value
+        }, 0);
+    
+        return manhattanDistance;
+    };
+    
+
+    const resetInputState = () => {
+        setKeystrokeTimes([]);
+        setHoldTimes([]);
+        setLastTime(null);
     };
 
     return (
         <div className="app-container">
-            <h1 className="app-title">Keystroke Dynamics Authentication</h1>
+            <h1>Keystroke Dynamics Authentication</h1>
 
-            <div className="registration-section">
-                <h2>Step 1: Registration</h2>
-                <p>Type the text: "{targetText}" (5 times)</p>
+            <div>
+                <h2>Registration</h2>
+                <p>Type the text: "{targetText}"</p>
                 <input
-                    className="text-input"
                     type="text"
-                    onKeyPress={(e) => handleKeyPress(e)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            setKeystrokeTimes([]);
-                            setLastTime(null);
-                        }
-                    }}
+                    onKeyPress={handleKeyPress}
+                    onKeyDown={handleKeyDown}
+                    onKeyUp={handleKeyUp}
                     onChange={(e) => {
                         e.target.value = handleRegistrationChange(e.target.value);
                         if (e.target.value === targetText) {
@@ -197,7 +267,25 @@ const KeystrokeAuthApp = () => {
                     }}
                 />
                 <p>Registered Samples: {registrationVectors.length} / 5</p>
+            </div>
 
+            <div>
+                <h2>Authentication</h2>
+                <p>Type the text: "{targetText}"</p>
+                <input
+                    type="text"
+                    value={authInput}
+                    onKeyPress={handleKeyPress}
+                    onKeyDown={handleKeyDown}
+                    onKeyUp={handleKeyUp}
+                    onChange={(e) => {
+                        handleAuthChange(e.target.value);
+                        if (e.target.value === targetText) {
+                            handleAuthSubmit(e.target.value);
+                            e.target.value = "";
+                        }
+                    }}
+                />
                 {medianVector && (
                     <div className="average-vector-section">
                         <h3>Median Vector</h3>
@@ -207,6 +295,9 @@ const KeystrokeAuthApp = () => {
                                     {medianVector.map((_, index) => (
                                         <th key={index}>Interval {index + 1}</th>
                                     ))}
+                                    {medianHoldVector.map((_, index) => (
+                                        <th key={`hold-${index}`}>Hold {index + 1}</th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody>
@@ -214,78 +305,27 @@ const KeystrokeAuthApp = () => {
                                     {medianVector.map((value, index) => (
                                         <td key={index}>{value.toFixed(2)}</td>
                                     ))}
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        <h3>Standard Deviation Ranges</h3>
-                        <table className="vector-table">
-                            <thead>
-                                <tr>
-                                    {stdDevs.map((_, index) => (
-                                        <th key={index}>Interval {index + 1}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    {stdDevs.map((stdDev, index) => (
-                                        <td key={index}>{stdDev.toFixed(2)}</td>
+                                    {medianHoldVector.map((value, index) => (
+                                        <td key={`hold-${index}`}>{value.toFixed(2)}</td>
                                     ))}
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 )}
-            </div>
 
-            <div className="authentication-section">
-                <h2>Step 2: Authentication</h2>
-                <p>Type the text: "{targetText}" (3 attempts)</p>
-                <input
-                    className="text-input"
-                    type="text"
-                    value={authInput}
-                    onKeyPress={(e) => handleKeyPress(e, true)}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            setKeystrokeTimes([]);
-                            setLastTime(null);
-                        }
-                    }}
-                    onChange={(e) => {
-                        handleAuthChange(e.target.value);
-                        if (e.target.value === targetText) {
-                            handleAuthSubmit(e.target.value);
-                            setAuthInput('');
-                        }
-                    }}
-                />
-                <p>Authentication Attempts: {authAttempts.length} / 3</p>
-
-                {authResult !== null && (
-                    <div className="auth-result-section">
-                        <h3>Authentication Result</h3>
+                {authResult.finalScore > 0 && (
+                    <div>
                         <p>Final Score: {authResult.finalScore.toFixed(2)}</p>
-                        <p>Sum of Y-Scores: {authResult.yScoreSum.toFixed(2)}</p>
-                        <p>Vector Length Variation: {vectorLengthVariation}%</p>
-                        <h3>Y-Scores</h3>
-                        <table className="vector-table">
-                            <thead>
-                                <tr>
-                                    {authResult.yScores.map((_, index) => (
-                                        <th key={index}>Interval {index + 1}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    {authResult.yScores.map((yScore, index) => (
-                                        <td key={index}>{yScore.toFixed(2)}</td>
-                                    ))}
-                                </tr>
-                            </tbody>
-                        </table>
+                        <p>Y-Scores: {authResult.yScores.join(", ")}</p>
+                        <p>Scaled Manhattan Distance: {authResult.manhattanDistance.toFixed(2)}</p>
+                        <div>
+                            {authResult.finalScore >= 5 && authResult.manhattanDistance < 0.18 ? (
+                                <p>Accepted</p>
+                            ) : (
+                                <p>Not Accepted</p>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
